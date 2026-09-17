@@ -1,0 +1,7 @@
+torch>=2.4
+transformers>=4.45
+pandas
+scikit-learn
+numpy
+sentencepiece
+protobuf

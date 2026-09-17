@@ -1,0 +1,20 @@
+# garbage
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+*.DS_Store
+logs/
+
+# venv
+.venv
+.DS_Store
+
+# data (сырой CSV ~13 ГБ и производные parquet)
+data/
+
+# runs
+logs/
+runs/
