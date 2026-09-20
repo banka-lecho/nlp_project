@@ -31,6 +31,8 @@ def parse_args():
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--split-seed", type=int, default=42)
+    parser.add_argument("--strip-grade", action="store_true",
+                        help="вырезать из текста явную оценку автора («8 из 10»)")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
     return parser.parse_args()
@@ -92,13 +94,15 @@ def main():
     args = parse_args()
     set_seed(args.seed)
     device = pick_device()
-    output_dir = args.output_dir or ROOT / "runs" / f"{args.model.split('/')[-1]}_seed{args.seed}"
+    suffix = "_nograde" if args.strip_grade else ""
+    output_dir = args.output_dir or ROOT / "runs" / f"{args.model.split('/')[-1]}_seed{args.seed}{suffix}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    train_df, val_df, test_df = split_dataset(load_dataset(), args.split_seed)
+    train_df, val_df, test_df = split_dataset(load_dataset(remove_grade=args.strip_grade), args.split_seed)
     if args.limit:
         train_df, val_df, test_df = (d.head(args.limit) for d in (train_df, val_df, test_df))
-    print(f"device={device} train={len(train_df)} val={len(val_df)} test={len(test_df)}")
+    print(f"device={device} train={len(train_df)} val={len(val_df)} test={len(test_df)} "
+          f"strip_grade={args.strip_grade}")
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     train_loader = make_loader(train_df, tokenizer, args.max_length, args.batch_size, shuffle=True)

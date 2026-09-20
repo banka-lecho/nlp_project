@@ -1,0 +1,3 @@
+задача,n,accuracy,macro-F1
+stance,1818,0.803,0.718
+premise,1818,0.687,0.647

@@ -1,0 +1,4 @@
+выборка,n,stance:Bad,stance:Neutral,stance:Good,premise:Bad,premise:Neutral,premise:Good
+train,2296,0.344,0.226,0.43,0.233,0.353,0.413
+val,492,0.333,0.234,0.433,0.234,0.354,0.413
+test,492,0.339,0.236,0.425,0.234,0.354,0.413
