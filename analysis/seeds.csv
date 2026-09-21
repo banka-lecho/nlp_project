@@ -1,5 +1,18 @@
 config,seeds,minutes,device,stance,premise
-ruRoberta-large,1,34.1,mps,74.22,73.66
-ruRoberta-large_nograde,1,31.0,mps,72.93,74.27
-rubert-base-cased,5,11.4,mps,72.20 ± 2.43,69.09 ± 1.32
-rubert-base-cased_nograde,5,11.3,mps,64.42 ± 1.15,68.09 ± 0.79
+ruRoberta-large,5,0.9,cuda,74.11 ± 1.44,74.61 ± 0.83
+ruRoberta-large_balanced,5,0.8,cuda,76.25 ± 1.19,74.05 ± 0.90
+ruRoberta-large_corn,5,0.8,cuda,63.67 ± 24.51,63.59 ± 24.68
+ruRoberta-large_corn_lr1e-5,5,0.9,cuda,73.20 ± 0.87,73.14 ± 0.65
+ruRoberta-large_first-half,5,0.6,cuda,68.52 ± 1.21,70.02 ± 1.21
+ruRoberta-large_group-movie,5,0.9,cuda,75.38 ± 0.79,77.75 ± 1.05
+ruRoberta-large_last-sentence,5,0.8,cuda,70.53 ± 0.66,73.38 ± 1.47
+ruRoberta-large_nograde,5,0.8,cuda,72.39 ± 1.33,74.12 ± 1.03
+ruRoberta-large_tail15,5,0.8,cuda,70.82 ± 1.22,74.23 ± 0.63
+rubert-base-cased,5,0.5,cuda,72.44 ± 1.04,69.39 ± 1.20
+rubert-base-cased_balanced,5,0.4,cuda,72.13 ± 1.04,67.04 ± 1.48
+rubert-base-cased_corn,5,0.4,cuda,71.97 ± 1.53,69.34 ± 0.63
+rubert-base-cased_first-half,5,0.4,cuda,54.40 ± 2.01,62.36 ± 1.41
+rubert-base-cased_group-movie,5,0.4,cuda,73.13 ± 1.46,70.56 ± 2.15
+rubert-base-cased_last-sentence,5,0.4,cuda,63.07 ± 2.65,66.89 ± 1.19
+rubert-base-cased_nograde,5,0.4,cuda,64.71 ± 1.26,68.01 ± 0.34
+rubert-base-cased_tail15,5,0.4,cuda,59.68 ± 1.31,68.78 ± 2.38
