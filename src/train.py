@@ -41,6 +41,8 @@ def parse_args():
     parser.add_argument("--select-by", choices=["mean", "last"], default="last",
                         help="mean — брать эпоху с лучшим средним val macro-F1, last — последнюю, как в статье")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--skip-existing", action="store_true",
+                        help="не пересчитывать прогон, если в каталоге уже есть metrics.json")
     parser.add_argument("--tag", default=None, help="произвольный суффикс каталога прогона")
     parser.add_argument("--output-dir", type=Path, default=None)
     return parser.parse_args()
@@ -135,6 +137,9 @@ def main():
     set_seed(args.seed)
     device = pick_device()
     output_dir = args.output_dir or ROOT / "runs" / run_name(args)
+    if args.skip_existing and (output_dir / "metrics.json").exists():
+        print(f"пропуск: {output_dir.name} уже посчитан")
+        return
     output_dir.mkdir(parents=True, exist_ok=True)
 
     dataset = load_dataset(redact=args.redact)

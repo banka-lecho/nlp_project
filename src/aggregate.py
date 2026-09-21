@@ -29,11 +29,14 @@ def collect(runs_dir):
         summary = json.loads(path.read_text())
         name = path.parent.name
         match = SEED.search(name)
+        args = summary.get("args", {})
         rows.append({
             "config": SEED.sub("", name),
             "seed": int(match.group(1)) if match else -1,
             "minutes": round(summary.get("train_minutes", float("nan")), 1),
             "epoch": summary.get("selected_epoch"),
+            "device": summary.get("device", "?"),
+            "testset": f"group={args.get('group')} split={args.get('split_seed')}",
             **{task: summary["test"][task] for task in TASKS},
         })
     if not rows:
@@ -43,7 +46,8 @@ def collect(runs_dir):
 
 def summarise(runs):
     grouped = runs.groupby("config")
-    table = pd.DataFrame({"seeds": grouped.size(), "minutes": grouped.minutes.mean().round(1)})
+    table = pd.DataFrame({"seeds": grouped.size(), "minutes": grouped.minutes.mean().round(1),
+                          "device": grouped.device.agg(lambda v: "/".join(sorted(set(v))))})
     for task in TASKS:
         table[task] = [
             f"{values.mean() * 100:.2f} ± {values.std(ddof=1) * 100:.2f}" if len(values) > 1
@@ -60,12 +64,19 @@ def delta(runs, config_a, config_b):
     shared = sorted(set(a.index) & set(b.index))
     if not shared:
         raise SystemExit(f"нет общих seed'ов у {config_a} и {config_b}")
+    if set(a.testset) != set(b.testset):
+        print(f"ВНИМАНИЕ: тестовые выборки разные ({a.testset.iloc[0]} против {b.testset.iloc[0]}),")
+        print("разность считается между разными выборками и парной не является\n")
+    if set(a.device) != set(b.device):
+        print(f"ВНИМАНИЕ: прогоны сделаны на разном железе ({set(a.device) | set(b.device)})\n")
     rows = []
     for task in TASKS:
-        diffs = np.array([a.loc[s, task] - b.loc[s, task] for s in shared]) * 100
+        values_a = np.array([a.loc[s, task] for s in shared]) * 100
+        values_b = np.array([b.loc[s, task] for s in shared]) * 100
+        diffs = values_a - values_b
         rows.append({
             "task": task, "seeds": len(shared),
-            "A": round(a[task].mean() * 100, 2), "B": round(b[task].mean() * 100, 2),
+            "A": round(values_a.mean(), 2), "B": round(values_b.mean(), 2),
             "delta": round(diffs.mean(), 2),
             "std": round(diffs.std(ddof=1), 2) if len(diffs) > 1 else np.nan,
             "по seed'ам": " ".join(f"{d:+.2f}" for d in diffs),
