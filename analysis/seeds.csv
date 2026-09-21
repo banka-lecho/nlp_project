@@ -1,0 +1,5 @@
+config,seeds,minutes,stance,premise
+ruRoberta-large,1,34.1,74.22,73.66
+ruRoberta-large_nograde,1,31.0,72.93,74.27
+rubert-base-cased,5,11.4,72.20 ± 2.43,69.09 ± 1.32
+rubert-base-cased_nograde,5,11.3,64.42 ± 1.15,68.09 ± 0.79

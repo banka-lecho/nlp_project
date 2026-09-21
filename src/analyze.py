@@ -12,7 +12,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
-from data import DATA_PATH, GRADE_PATTERNS, LABELS, load_dataset, split_dataset, strip_grade
+from data import (DATA_PATH, GRADE_PATTERNS, LABELS, REDACTIONS, load_dataset, split_dataset,
+                  strip_grade)
 
 ROOT = Path(__file__).resolve().parent.parent
 GRADE_VALUE = re.compile(
@@ -148,6 +149,23 @@ def grade_leak(df, out_dir):
     print(f"удаляется слов: в среднем "
           f"{(df.content.str.split().str.len() - cleaned.str.split().str.len()).mean():.2f}")
 
+    print("\nлестница удаления (--redact), накопительная — каждая ступень включает предыдущие:")
+    base = df.content.str.strip()
+    rows = []
+    for name, redaction in REDACTIONS.items():
+        text = base.map(redaction)
+        rows.append({
+            "redact": name,
+            "слов": round(text.str.split().str.len().mean(), 1),
+            "изменено": (text != base).sum(),
+            "остался маркер оценки": int(text.apply(lambda t: any(p.search(t) for p in GRADE_PATTERNS)).sum()),
+            "пустых": int((text.str.len() == 0).sum()),
+        })
+    ladder = show(pd.DataFrame(rows))
+    ladder.to_csv(out_dir / "redaction_ladder.csv", index=False)
+    print("\nсмысл лестницы: grade убирает только число, дальше убывает и сам текст —")
+    print("падение качества ниже уровня grade уже нельзя списать на утечку оценки")
+
 
 def noise(df, out_dir):
     section("5. Шум в тексте")
@@ -194,6 +212,27 @@ def splits(out_dir, split_seed):
     authors = raw_frame(DATA_PATH).author
     print(f"уникальных авторов: {authors.nunique()}, максимум отзывов у одного: {authors.value_counts().max()}")
     print("сплит не групповой: один автор может попасть и в train, и в test")
+
+    print("\nчто даёт групповой сплит (--group):")
+    rows = []
+    for group in [None, "movie_name", "author"]:
+        parts = split_dataset(df, split_seed, group)
+        train, _, test = parts
+        row = {
+            "group": group or "нет (как в статье)",
+            "train/val/test": "/".join(str(len(part)) for part in parts),
+            "фильмов теста в трейне": f"{test.movie_name.isin(train.movie_name).mean():.1%}",
+            "авторов теста в трейне": f"{test.author.isin(train.author).mean():.1%}",
+        }
+        for task, column in [("stance", "NEW_grade3"), ("premise", "arg_label")]:
+            share = test[column].value_counts(normalize=True)
+            row[f"test {task} Bad/Neu/Good"] = "/".join(f"{share.get(l, 0):.2f}" for l in LABELS)
+        rows.append(row)
+    groups = show(pd.DataFrame(rows))
+    groups.to_csv(out_dir / "group_splits.csv", index=False)
+    print("\nгрупповой сплит по фильму убирает пересечение полностью, но теряет стратификацию:")
+    print("баланс классов в тесте плывёт, поэтому сравнивать с обычным сплитом можно только")
+    print("как два разных режима оценки, а не как два числа одной таблицы")
 
 
 def confusion(runs_dir):
