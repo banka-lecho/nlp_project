@@ -4,6 +4,7 @@ cd "$(dirname "$0")"
 
 PY=${PY:-.venv/bin/python}
 SEEDS=${SEEDS:-"42 43 44 45 46"}
+CUDA=${CUDA:-}
 BASE=${BASE:-DeepPavlov/rubert-base-cased}
 LARGE=${LARGE:-ai-forever/ruRoberta-large}
 LOG=logs/server.log
@@ -25,20 +26,40 @@ usage() {
 Этапы независимы и идут по убыванию важности: seeds закрывает главный пробел
 (у ruRoberta пока один прогон, её разброс неизвестен), остальное — сверх того.
 
-Переменные окружения: PY, SEEDS, BASE, LARGE.
+Переменные окружения: PY, SEEDS, BASE, LARGE, CUDA.
+
+CUDA задаёт индекс колёс torch под версию драйвера, например CUDA=cu126 для драйвера
+12.6. По умолчанию pip ставит сборку под самую новую CUDA, которой нужен свежий драйвер.
 TXT
 }
 
 check_gpu() {
     "$PY" - <<'PYCODE'
 import sys, torch
-if not torch.cuda.is_available():
-    print("CUDA недоступна: torch видит только CPU.")
-    print("Прогоны займут часы вместо минут. Переустановите torch с поддержкой CUDA.")
-    sys.exit(1)
-name = torch.cuda.get_device_name(0)
-total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-print(f"GPU: {name}, {total:.0f} GB")
+
+built = torch.version.cuda
+print(f"torch {torch.__version__}, собран под CUDA {built}")
+if torch.cuda.is_available():
+    count = torch.cuda.device_count()
+    for i in range(count):
+        memory = torch.cuda.get_device_properties(i).total_memory / 1024**3
+        print(f"  GPU {i}: {torch.cuda.get_device_name(i)}, {memory:.0f} GB")
+    if count > 1:
+        print(f"  видно {count} устройств; CUDA_VISIBLE_DEVICES=N выбирает одно")
+    sys.exit(0)
+
+print()
+print("CUDA недоступна, прогоны пойдут на CPU и займут часы вместо минут.")
+if built and int(built.split(".")[0]) >= 13:
+    print()
+    print(f"Колесо torch собрано под CUDA {built}, а она требует драйвер 580+.")
+    print("Проверьте версию драйвера в nvidia-smi и поставьте сборку под неё:")
+    print("    CUDA=cu126 ./run_server.sh setup        для драйвера 12.x")
+    print("или вручную:")
+    print("    pip install --force-reinstall torch --index-url https://download.pytorch.org/whl/cu126")
+else:
+    print("Проверьте nvidia-smi и соответствие сборки torch версии драйвера.")
+sys.exit(1)
 PYCODE
 }
 
@@ -52,8 +73,12 @@ run() {
 }
 
 stage_setup() {
-    python3 -m venv .venv
+    [ -d .venv ] || python3 -m venv .venv
     .venv/bin/pip install --upgrade pip
+    if [ -n "$CUDA" ]; then
+        echo "ставлю torch из индекса $CUDA"
+        .venv/bin/pip install --force-reinstall torch --index-url "https://download.pytorch.org/whl/$CUDA"
+    fi
     .venv/bin/pip install -r requirements.txt
     check_gpu
 }

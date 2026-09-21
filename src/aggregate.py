@@ -21,6 +21,7 @@ from model import TASKS
 
 ROOT = Path(__file__).resolve().parent.parent
 SEED = re.compile(r"_seed(\d+)")
+CHANCE_LEVEL = 0.35
 
 
 def collect(runs_dir):
@@ -42,6 +43,17 @@ def collect(runs_dir):
     if not rows:
         raise SystemExit(f"нет прогонов в {runs_dir}/")
     return pd.DataFrame(rows).sort_values(["config", "seed"])
+
+
+def degenerate(runs):
+    """Прогоны на уровне случайного угадывания: обучение разошлось, а не «плохой seed».
+
+    Для трёх классов вырожденное предсказание одного класса даёт macro-F1 около 0.17.
+    Такой прогон незаметно утаскивает среднее и раздувает разброс, поэтому его лучше
+    увидеть отдельной строкой, чем искать глазами в таблице.
+    """
+    mask = runs[list(TASKS)].max(axis=1) < CHANCE_LEVEL
+    return runs[mask]
 
 
 def summarise(runs):
@@ -69,6 +81,12 @@ def delta(runs, config_a, config_b):
         print("разность считается между разными выборками и парной не является\n")
     if set(a.device) != set(b.device):
         print(f"ВНИМАНИЕ: прогоны сделаны на разном железе ({set(a.device) | set(b.device)})\n")
+    failed = degenerate(pd.concat([a.reset_index(), b.reset_index()]))
+    if not failed.empty:
+        print(f"ВНИМАНИЕ: среди сравниваемых прогонов есть разошедшиеся "
+              f"(seed {', '.join(str(s) for s in sorted(set(failed.seed)))}),")
+        print("дельта по ним не имеет смысла\n")
+
     rows = []
     for task in TASKS:
         values_a = np.array([a.loc[s, task] for s in shared]) * 100
@@ -96,6 +114,14 @@ def main():
     if args.delta:
         print(delta(runs, *args.delta).to_string(index=False))
         return
+
+    failed = degenerate(runs)
+    if not failed.empty:
+        print(f"РАЗОШЛИСЬ (macro-F1 ниже {CHANCE_LEVEL}, обе задачи на уровне угадывания):")
+        for row in failed.itertuples():
+            print(f"  {row.config}_seed{row.seed}: stance {row.stance * 100:.2f}, "
+                  f"premise {row.premise * 100:.2f}")
+        print("эти прогоны входят в среднее и разброс ниже — пересчитайте их или исключите\n")
 
     table = summarise(runs)
     print(table.to_string(index=False))
