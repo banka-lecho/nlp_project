@@ -1,9 +1,3 @@
-"""Разведочный анализ датасета: баланс классов, длины, утечка оценки в текст, шум,
-качество сплита. Таблицы печатаются и сохраняются в analysis/ для отчёта.
-
-    python src/analyze.py [--tokenizer DeepPavlov/rubert-base-cased] [--runs runs]
-"""
-
 import argparse
 import re
 from pathlib import Path
@@ -12,8 +6,15 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, f1_score
 
-from data import (DATA_PATH, GRADE_PATTERNS, LABELS, REDACTIONS, load_dataset, split_dataset,
-                  strip_grade)
+from data import (
+    DATA_PATH,
+    GRADE_PATTERNS,
+    LABELS,
+    REDACTIONS,
+    load_dataset,
+    split_dataset,
+    strip_grade,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 GRADE_VALUE = re.compile(
@@ -42,40 +43,58 @@ def raw_frame(path):
 def overview(df):
     section("1. Состав таблицы")
     df = df.drop(columns=["content_raw"])
-    show(pd.DataFrame({
-        "колонка": df.columns,
-        "тип": [str(t) for t in df.dtypes],
-        "пропусков": df.isna().sum().values,
-        "уникальных": df.nunique().values,
-    }))
+    show(
+        pd.DataFrame(
+            {
+                "колонка": df.columns,
+                "тип": [str(t) for t in df.dtypes],
+                "пропусков": df.isna().sum().values,
+                "уникальных": df.nunique().values,
+            }
+        )
+    )
     print(f"\nстрок: {len(df)}")
     print(f"дубликатов content: {df.content.duplicated().sum()}")
     ids = df.review_id.value_counts()
-    print(f"неуникальных review_id: {df.review_id.duplicated().sum()} "
-          f"(максимум {ids.max()} строк на id)")
+    print(
+        f"неуникальных review_id: {df.review_id.duplicated().sum()} "
+        f"(максимум {ids.max()} строк на id)"
+    )
     reused = df.groupby("review_id").movie_name.nunique()
-    print(f"из них с разными фильмами под одним id: {(reused > 1).sum()} — "
-          f"тексты разные, это не утечка, а ненадёжный ключ")
+    print(
+        f"из них с разными фильмами под одним id: {(reused > 1).sum()} — "
+        f"тексты разные, это не утечка, а ненадёжный ключ"
+    )
 
 
 def balance(df, out_dir):
     section("2. Баланс классов")
-    both = pd.DataFrame({
-        "stance (NEW_grade3)": df.NEW_grade3.value_counts().reindex(LABELS),
-        "premise (arg_label)": df.arg_label.value_counts().reindex(LABELS),
-    })
+    both = pd.DataFrame(
+        {
+            "stance (NEW_grade3)": df.NEW_grade3.value_counts().reindex(LABELS),
+            "premise (arg_label)": df.arg_label.value_counts().reindex(LABELS),
+        }
+    )
     both["stance %"] = (both["stance (NEW_grade3)"] / len(df) * 100).round(1)
     both["premise %"] = (both["premise (arg_label)"] / len(df) * 100).round(1)
     show(both.rename_axis("класс").reset_index())
-    print(f"\nдисбаланс (max/min): stance {both.iloc[:, 0].max() / both.iloc[:, 0].min():.2f}, "
-          f"premise {both.iloc[:, 1].max() / both.iloc[:, 1].min():.2f}")
+    print(
+        f"\nдисбаланс (max/min): stance {both.iloc[:, 0].max() / both.iloc[:, 0].min():.2f}, "
+        f"premise {both.iloc[:, 1].max() / both.iloc[:, 1].min():.2f}"
+    )
 
     print("\nсовместное распределение stance × premise:")
-    joint = pd.crosstab(df.NEW_grade3, df.arg_label).reindex(index=LABELS, columns=LABELS)
+    joint = pd.crosstab(df.NEW_grade3, df.arg_label).reindex(
+        index=LABELS, columns=LABELS
+    )
     show(joint.rename_axis("stance \\ premise").reset_index())
-    print(f"\nконгруэнтных (stance == premise): {(df.NEW_grade3 == df.arg_label).mean():.1%}")
-    print(f"grade3 == NEW_grade3 (доля без ручной переразметки): "
-          f"{(df.grade3 == df.NEW_grade3).mean():.1%}")
+    print(
+        f"\nконгруэнтных (stance == premise): {(df.NEW_grade3 == df.arg_label).mean():.1%}"
+    )
+    print(
+        f"grade3 == NEW_grade3 (доля без ручной переразметки): "
+        f"{(df.grade3 == df.NEW_grade3).mean():.1%}"
+    )
 
     both.to_csv(out_dir / "class_balance.csv")
     joint.to_csv(out_dir / "joint_labels.csv")
@@ -83,84 +102,128 @@ def balance(df, out_dir):
 
 def lengths(df, out_dir, tokenizer_names):
     section("3. Длина текстов")
-    rows = [{"единица": "слова", **df.content.str.split().str.len()
-             .describe(percentiles=[.5, .95, .99]).round(0).to_dict()}]
+    rows = [
+        {
+            "единица": "слова",
+            **df.content.str.split()
+            .str.len()
+            .describe(percentiles=[0.5, 0.95, 0.99])
+            .round(0)
+            .to_dict(),
+        }
+    ]
     for name in tokenizer_names:
         from transformers import AutoTokenizer
 
         tok = AutoTokenizer.from_pretrained(name)
-        lengths = pd.Series([len(tok(t, truncation=False)["input_ids"]) for t in df.content])
-        rows.append({"единица": f"токены {name.split('/')[-1]}",
-                     **lengths.describe(percentiles=[.5, .95, .99]).round(0).to_dict()})
-        print(f"{name}: обрезается при max_length=512 — {(lengths > 512).mean():.2%}, "
-              f"при 320 — {(lengths > 320).mean():.2%}, при 256 — {(lengths > 256).mean():.2%}")
+        lengths = pd.Series(
+            [len(tok(t, truncation=False)["input_ids"]) for t in df.content]
+        )
+        rows.append(
+            {
+                "единица": f"токены {name.split('/')[-1]}",
+                **lengths.describe(percentiles=[0.5, 0.95, 0.99]).round(0).to_dict(),
+            }
+        )
+        print(
+            f"{name}: обрезается при max_length=512 — {(lengths > 512).mean():.2%}, "
+            f"при 320 — {(lengths > 320).mean():.2%}, при 256 — {(lengths > 256).mean():.2%}"
+        )
     table = show(pd.DataFrame(rows).drop(columns=["count"]))
     table.to_csv(out_dir / "lengths.csv", index=False)
     if tokenizer_names:
-        print("\nвывод: max_length=512 никогда не срабатывает, запас памяти тратится впустую")
+        print(
+            "\nвывод: max_length=512 никогда не срабатывает, запас памяти тратится впустую"
+        )
 
 
 def grade_leak(df, out_dir):
     section("4. Утечка оценки в текст")
     value = df.content.apply(
-        lambda t: (lambda m: float(m[-1].replace(",", ".")) if m else np.nan)(GRADE_VALUE.findall(t))
+        lambda t: (lambda m: float(m[-1].replace(",", ".")) if m else np.nan)(
+            GRADE_VALUE.findall(t)
+        )
     )
     marked = df.content.apply(lambda t: any(p.search(t) for p in GRADE_PATTERNS))
     print(f"отзывов с явной оценкой: {marked.sum()} ({marked.mean():.1%})")
 
-    grade10 = pd.to_numeric(df.grade10.astype(str).str.replace(",", "."), errors="coerce")
+    grade10 = pd.to_numeric(
+        df.grade10.astype(str).str.replace(",", "."), errors="coerce"
+    )
     known = value.notna() & grade10.notna()
-    print(f"извлечённое число совпадает с колонкой grade10: {(value[known] == grade10[known]).mean():.1%} "
-          f"(из {known.sum()} отзывов)")
-    print("то есть в тексте лежит ровно тот балл, из которого выведен таргет NEW_grade3")
+    print(
+        f"извлечённое число совпадает с колонкой grade10: {(value[known] == grade10[known]).mean():.1%} "
+        f"(из {known.sum()} отзывов)"
+    )
+    print(
+        "то есть в тексте лежит ровно тот балл, из которого выведен таргет NEW_grade3"
+    )
 
     sub = df[value.notna()].assign(value=value[value.notna()])
-    pred = sub.value.apply(lambda x: next(lab for bound, lab in GRADE_TO_LABEL if x <= bound))
+    pred = sub.value.apply(
+        lambda x: next(lab for bound, lab in GRADE_TO_LABEL if x <= bound)
+    )
     rows = []
     for task, column in [("stance", "NEW_grade3"), ("premise", "arg_label")]:
-        rows.append({
-            "задача": task,
-            "n": len(sub),
-            "accuracy": round(accuracy_score(sub[column], pred), 3),
-            "macro-F1": round(f1_score(sub[column], pred, average="macro"), 3),
-        })
+        rows.append(
+            {
+                "задача": task,
+                "n": len(sub),
+                "accuracy": round(accuracy_score(sub[column], pred), 3),
+                "macro-F1": round(f1_score(sub[column], pred, average="macro"), 3),
+            }
+        )
     print("\nправило «взять число из текста», без обучения, на отзывах с оценкой:")
     rule = show(pd.DataFrame(rows))
     rule.to_csv(out_dir / "grade_rule_baseline.csv", index=False)
 
     print("\nсредний балл в тексте по классам:")
-    by_class = pd.DataFrame({
-        "stance": sub.groupby("NEW_grade3").value.mean().reindex(LABELS).round(2),
-        "premise": sub.groupby("arg_label").value.mean().reindex(LABELS).round(2),
-    })
+    by_class = pd.DataFrame(
+        {
+            "stance": sub.groupby("NEW_grade3").value.mean().reindex(LABELS).round(2),
+            "premise": sub.groupby("arg_label").value.mean().reindex(LABELS).round(2),
+        }
+    )
     show(by_class.rename_axis("класс").reset_index())
 
     position = df.content[marked].apply(
         lambda t: max(m.end() for p in GRADE_PATTERNS for m in p.finditer(t)) / len(t)
     )
-    print(f"\nмаркер стоит в последних 15% текста у {(position >= 0.85).mean():.1%} отзывов "
-          f"— модель видит его гарантированно")
+    print(
+        f"\nмаркер стоит в последних 15% текста у {(position >= 0.85).mean():.1%} отзывов "
+        f"— модель видит его гарантированно"
+    )
 
     cleaned = df.content.map(strip_grade)
     changed = cleaned != df.content
     residual = cleaned.str.contains(r"из\s*10|из\s*100|\d\s*/\s*10", case=False)
-    print(f"\nstrip_grade(): изменено {changed.sum()} текстов, остаточных маркеров {residual.sum()}, "
-          f"пустых текстов {(cleaned.str.len() == 0).sum()}")
-    print(f"удаляется слов: в среднем "
-          f"{(df.content.str.split().str.len() - cleaned.str.split().str.len()).mean():.2f}")
+    print(
+        f"\nstrip_grade(): изменено {changed.sum()} текстов, остаточных маркеров {residual.sum()}, "
+        f"пустых текстов {(cleaned.str.len() == 0).sum()}"
+    )
+    print(
+        f"удаляется слов: в среднем "
+        f"{(df.content.str.split().str.len() - cleaned.str.split().str.len()).mean():.2f}"
+    )
 
-    print("\nлестница удаления (--redact), накопительная — каждая ступень включает предыдущие:")
+    print(
+        "\nлестница удаления (--redact), накопительная — каждая ступень включает предыдущие:"
+    )
     base = df.content.str.strip()
     rows = []
     for name, redaction in REDACTIONS.items():
         text = base.map(redaction)
-        rows.append({
-            "redact": name,
-            "слов": round(text.str.split().str.len().mean(), 1),
-            "изменено": (text != base).sum(),
-            "остался маркер оценки": int(text.apply(lambda t: any(p.search(t) for p in GRADE_PATTERNS)).sum()),
-            "пустых": int((text.str.len() == 0).sum()),
-        })
+        rows.append(
+            {
+                "redact": name,
+                "слов": round(text.str.split().str.len().mean(), 1),
+                "изменено": (text != base).sum(),
+                "остался маркер оценки": int(
+                    text.apply(lambda t: any(p.search(t) for p in GRADE_PATTERNS)).sum()
+                ),
+                "пустых": int((text.str.len() == 0).sum()),
+            }
+        )
     ladder = show(pd.DataFrame(rows))
     ladder.to_csv(out_dir / "redaction_ladder.csv", index=False)
     print("\nсмысл лестницы: grade убирает только число, дальше убывает и сам текст —")
@@ -170,7 +233,9 @@ def grade_leak(df, out_dir):
 def noise(df, out_dir):
     section("5. Шум в тексте")
     padded = df.content_raw.str.match(r"^\s|.*\s$")
-    print(f"padding по краям в исходном CSV: {padded.mean():.1%} — снимается обычным strip()\n")
+    print(
+        f"padding по краям в исходном CSV: {padded.mean():.1%} — снимается обычным strip()\n"
+    )
     checks = [
         ("двойные пробелы внутри текста", r"  "),
         ("склейка предложений (слово.Слово)", r"[а-яa-z]\.[А-ЯA-Z]"),
@@ -181,10 +246,17 @@ def noise(df, out_dir):
         ("url", r"https?://"),
         ("буква ё", r"ё"),
     ]
-    table = show(pd.DataFrame([
-        {"признак": name, "доля отзывов": f"{df.content.str.contains(p, regex=True).mean():.1%}"}
-        for name, p in checks
-    ]))
+    table = show(
+        pd.DataFrame(
+            [
+                {
+                    "признак": name,
+                    "доля отзывов": f"{df.content.str.contains(p, regex=True).mean():.1%}",
+                }
+                for name, p in checks
+            ]
+        )
+    )
     table.to_csv(out_dir / "noise.csv", index=False)
     print("\nсклейки вида «Темнота.Чужие руки» дают токенизатору мусорные сабтокены —")
     print("кандидат на отдельный флаг --normalize-text")
@@ -207,10 +279,14 @@ def splits(out_dir, split_seed):
     print("\nsplit_dataset() стратифицирует только по arg_label; распределение stance")
     print("держится случайно и может поехать на другом split-seed")
 
-    print(f"\nфильмов в test: {test.movie_name.nunique()}, "
-          f"из них встречаются в train: {test.movie_name.isin(train.movie_name).mean():.1%}")
+    print(
+        f"\nфильмов в test: {test.movie_name.nunique()}, "
+        f"из них встречаются в train: {test.movie_name.isin(train.movie_name).mean():.1%}"
+    )
     authors = raw_frame(DATA_PATH).author
-    print(f"уникальных авторов: {authors.nunique()}, максимум отзывов у одного: {authors.value_counts().max()}")
+    print(
+        f"уникальных авторов: {authors.nunique()}, максимум отзывов у одного: {authors.value_counts().max()}"
+    )
     print("сплит не групповой: один автор может попасть и в train, и в test")
 
     print("\nчто даёт групповой сплит (--group):")
@@ -226,12 +302,18 @@ def splits(out_dir, split_seed):
         }
         for task, column in [("stance", "NEW_grade3"), ("premise", "arg_label")]:
             share = test[column].value_counts(normalize=True)
-            row[f"test {task} Bad/Neu/Good"] = "/".join(f"{share.get(l, 0):.2f}" for l in LABELS)
+            row[f"test {task} Bad/Neu/Good"] = "/".join(
+                f"{share.get(l, 0):.2f}" for l in LABELS
+            )
         rows.append(row)
     groups = show(pd.DataFrame(rows))
     groups.to_csv(out_dir / "group_splits.csv", index=False)
-    print("\nгрупповой сплит по фильму убирает пересечение полностью, но теряет стратификацию:")
-    print("баланс классов в тесте плывёт, поэтому сравнивать с обычным сплитом можно только")
+    print(
+        "\nгрупповой сплит по фильму убирает пересечение полностью, но теряет стратификацию:"
+    )
+    print(
+        "баланс классов в тесте плывёт, поэтому сравнивать с обычным сплитом можно только"
+    )
     print("как два разных режима оценки, а не как два числа одной таблицы")
 
 
@@ -249,7 +331,9 @@ def confusion(runs_dir):
             matrix.index = [LABELS[i] for i in matrix.index]
             matrix.columns = [LABELS[i] for i in matrix.columns]
             recall = (np.diag(matrix) / matrix.sum(axis=1)).round(2)
-            print(f"  {task}: " + ", ".join(f"{lab} {r:.0%}" for lab, r in recall.items()))
+            print(
+                f"  {task}: " + ", ".join(f"{lab} {r:.0%}" for lab, r in recall.items())
+            )
 
 
 def parse_args():
@@ -258,8 +342,12 @@ def parse_args():
     parser.add_argument("--runs", type=Path, default=ROOT / "runs")
     parser.add_argument("--out-dir", type=Path, default=ROOT / "analysis")
     parser.add_argument("--split-seed", type=int, default=42)
-    parser.add_argument("--tokenizer", action="append", default=None,
-                        help="повторяемый флаг; без него длины считаются только в словах")
+    parser.add_argument(
+        "--tokenizer",
+        action="append",
+        default=None,
+        help="повторяемый флаг; без него длины считаются только в словах",
+    )
     return parser.parse_args()
 
 

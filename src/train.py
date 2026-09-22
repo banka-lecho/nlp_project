@@ -31,19 +31,36 @@ def parse_args():
     parser.add_argument("--weight-decay", type=float, default=0.01)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--split-seed", type=int, default=42)
-    parser.add_argument("--redact", choices=list(REDACTIONS), default="none",
-                        help="что вырезать из текста: grade — явную оценку, дальше по лестнице")
-    parser.add_argument("--group", choices=["movie_name", "author"], default=None,
-                        help="групповой сплит: группа целиком уходит в одну выборку")
+    parser.add_argument(
+        "--redact",
+        choices=list(REDACTIONS),
+        default="none",
+        help="что вырезать из текста: grade — явную оценку, дальше по лестнице",
+    )
+    parser.add_argument(
+        "--group",
+        choices=["movie_name", "author"],
+        default=None,
+        help="групповой сплит: группа целиком уходит в одну выборку",
+    )
     parser.add_argument("--pooling", choices=["cls", "mean"], default="cls")
     parser.add_argument("--head", choices=["softmax", "corn"], default="softmax")
     parser.add_argument("--class-weights", choices=["none", "balanced"], default="none")
-    parser.add_argument("--select-by", choices=["mean", "last"], default="last",
-                        help="mean — брать эпоху с лучшим средним val macro-F1, last — последнюю, как в статье")
+    parser.add_argument(
+        "--select-by",
+        choices=["mean", "last"],
+        default="last",
+        help="mean — брать эпоху с лучшим средним val macro-F1, last — последнюю, как в статье",
+    )
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument("--skip-existing", action="store_true",
-                        help="не пересчитывать прогон, если в каталоге уже есть metrics.json")
-    parser.add_argument("--tag", default=None, help="произвольный суффикс каталога прогона")
+    parser.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="не пересчитывать прогон, если в каталоге уже есть metrics.json",
+    )
+    parser.add_argument(
+        "--tag", default=None, help="произвольный суффикс каталога прогона"
+    )
     parser.add_argument("--output-dir", type=Path, default=None)
     return parser.parse_args()
 
@@ -56,7 +73,11 @@ def run_name(args):
     parts.append(REDACTION_SUFFIX.get(args.redact, f"_{args.redact}").lstrip("_"))
     if args.group:
         parts.append("group-" + args.group.replace("_name", ""))
-    for value, default in [(args.pooling, "cls"), (args.head, "softmax"), (args.class_weights, "none")]:
+    for value, default in [
+        (args.pooling, "cls"),
+        (args.head, "softmax"),
+        (args.class_weights, "none"),
+    ]:
         if value != default:
             parts.append(value)
     if args.select_by != "last":
@@ -82,19 +103,29 @@ def make_loader(df, tokenizer, max_length, batch_size, shuffle):
             padding=True,
             return_tensors="pt",
         )
-        labels = {task: torch.tensor([row[f"{task}_label"] for row in rows]) for task in TASKS}
-        return {"input_ids": encoded["input_ids"], "attention_mask": encoded["attention_mask"]}, labels
+        labels = {
+            task: torch.tensor([row[f"{task}_label"] for row in rows]) for task in TASKS
+        }
+        return {
+            "input_ids": encoded["input_ids"],
+            "attention_mask": encoded["attention_mask"],
+        }, labels
 
     records = df[["content", "stance_label", "premise_label"]].to_dict("records")
-    return DataLoader(records, batch_size=batch_size, shuffle=shuffle, collate_fn=collate)
+    return DataLoader(
+        records, batch_size=batch_size, shuffle=shuffle, collate_fn=collate
+    )
 
 
 def class_weights(train_df, mode):
     if mode == "none":
         return None
     return {
-        task: compute_class_weight("balanced", classes=np.arange(len(LABELS)),
-                                   y=train_df[f"{task}_label"].to_numpy())
+        task: compute_class_weight(
+            "balanced",
+            classes=np.arange(len(LABELS)),
+            y=train_df[f"{task}_label"].to_numpy(),
+        )
         for task in TASKS
     }
 
@@ -120,7 +151,9 @@ def predict(model, loader, device):
 
 
 def scores(df, probs):
-    return {task: macro_f1(df[f"{task}_label"], probs[task].argmax(-1)) for task in TASKS}
+    return {
+        task: macro_f1(df[f"{task}_label"], probs[task].argmax(-1)) for task in TASKS
+    }
 
 
 def to_frame(df, probs):
@@ -145,21 +178,39 @@ def main():
     dataset = load_dataset(redact=args.redact)
     train_df, val_df, test_df = split_dataset(dataset, args.split_seed, args.group)
     if args.limit:
-        train_df, val_df, test_df = (d.head(args.limit) for d in (train_df, val_df, test_df))
-    print(f"device={device} train={len(train_df)} val={len(val_df)} test={len(test_df)} "
-          f"redact={args.redact} group={args.group} head={args.head} -> {output_dir.name}")
+        train_df, val_df, test_df = (
+            d.head(args.limit) for d in (train_df, val_df, test_df)
+        )
+    print(
+        f"device={device} train={len(train_df)} val={len(val_df)} test={len(test_df)} "
+        f"redact={args.redact} group={args.group} head={args.head} -> {output_dir.name}"
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    train_loader = make_loader(train_df, tokenizer, args.max_length, args.batch_size, shuffle=True)
-    val_loader = make_loader(val_df, tokenizer, args.max_length, args.batch_size, shuffle=False)
-    test_loader = make_loader(test_df, tokenizer, args.max_length, args.batch_size, shuffle=False)
+    train_loader = make_loader(
+        train_df, tokenizer, args.max_length, args.batch_size, shuffle=True
+    )
+    val_loader = make_loader(
+        val_df, tokenizer, args.max_length, args.batch_size, shuffle=False
+    )
+    test_loader = make_loader(
+        test_df, tokenizer, args.max_length, args.batch_size, shuffle=False
+    )
 
-    model = TwoHeadClassifier(args.model, pooling=args.pooling, head=args.head,
-                              class_weights=class_weights(train_df, args.class_weights)).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    model = TwoHeadClassifier(
+        args.model,
+        pooling=args.pooling,
+        head=args.head,
+        class_weights=class_weights(train_df, args.class_weights),
+    ).to(device)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.lr, weight_decay=args.weight_decay
+    )
     steps_per_epoch = math.ceil(len(train_loader) / args.grad_accum)
     total_steps = steps_per_epoch * args.epochs
-    scheduler = get_linear_schedule_with_warmup(optimizer, int(total_steps * args.warmup_ratio), total_steps)
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, int(total_steps * args.warmup_ratio), total_steps
+    )
 
     history, best = [], None
     start = time.time()
@@ -181,17 +232,32 @@ def main():
                     torch.mps.empty_cache()
             running_loss += loss.item()
             if step % 20 == 0 or step == len(train_loader):
-                print(f"epoch {epoch} step {step}/{len(train_loader)} loss={running_loss / step:.4f}", flush=True)
+                print(
+                    f"epoch {epoch} step {step}/{len(train_loader)} loss={running_loss / step:.4f}",
+                    flush=True,
+                )
         val_probs = predict(model, val_loader, device)
         val_scores = scores(val_df, val_probs)
-        history.append({"epoch": epoch, "train_loss": running_loss / len(train_loader), "val": val_scores})
-        print(f"epoch {epoch} val stance={val_scores['stance']:.4f} premise={val_scores['premise']:.4f}", flush=True)
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": running_loss / len(train_loader),
+                "val": val_scores,
+            }
+        )
+        print(
+            f"epoch {epoch} val stance={val_scores['stance']:.4f} premise={val_scores['premise']:.4f}",
+            flush=True,
+        )
 
         mean_score = sum(val_scores.values()) / len(val_scores)
         if best is None or mean_score > best["score"]:
             best = {"epoch": epoch, "score": mean_score, "val_probs": val_probs}
             if args.select_by == "mean":
-                best["state"] = {k: v.detach().to("cpu").clone() for k, v in model.state_dict().items()}
+                best["state"] = {
+                    k: v.detach().to("cpu").clone()
+                    for k, v in model.state_dict().items()
+                }
 
     selected_epoch = best["epoch"] if args.select_by == "mean" else args.epochs
     if selected_epoch != args.epochs:

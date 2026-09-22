@@ -18,3 +18,7 @@ data/
 # runs
 logs/
 runs/
+
+lit.bib
+report.text
+run_server.sh

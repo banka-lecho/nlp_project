@@ -48,6 +48,10 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python src/analyze.py --tokenizer DeepPavlov/rubert-base-cased
 ```
 
+То же самое с графиками — в ноутбуке [`notebooks/eda.ipynb`](notebooks/eda.ipynb).
+Картинки сохранены в файле, так что он читается и без запуска; чтобы выполнить
+заново, нужен jupyter (`pip install jupyter`) помимо `requirements.txt`.
+
 ## Анализ данных
 
 Полный разбор — в `src/analyze.py`, ниже то, что влияет на интерпретацию результатов.
