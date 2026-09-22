@@ -1,4 +1,4 @@
-# Argument Mining for Film Reviews: воспроизведение бейзлайна
+# Argument Mining for Film Reviews
 
 Воспроизводим эксперимент из статьи Serbina, Borisova, Rabinovich, *Argument Mining for Film Reviews* (Dialogue 2026).
 Датасет: [otipl2125/film_review_argumentation](https://huggingface.co/datasets/otipl2125/film_review_argumentation), CC-BY-4.0.
